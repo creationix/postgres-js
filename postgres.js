@@ -1,8 +1,6 @@
-
 var DEBUG = 0;
 
 include('util.js');
-include('md5.js');
 
 function add_int(message, num) {
 	var part;
@@ -379,15 +377,4 @@ exports.Connection = function (database, username, password) {
   }
 };
 
-function onLoad() {
-
-  var db = new exports.Connection("databasename", "username", "password");
-  db.query("SELECT id FROM users LIMIT 1", p);
-  db.query("SELECT id FROM users where id > 2 LIMIT 1", p);
-  db.query("SELECT id FROM users WHERE id > 5 LIMIT 1", p);
-  setTimeout(function () {
-    db.query("SELECT * FROM users", p);
-    db.close();
-  }, 20);
-}
 
