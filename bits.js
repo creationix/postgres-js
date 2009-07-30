@@ -92,4 +92,8 @@ Array.prototype.parse_multi_cstring = function () {
   return fields;
 };
 
-
+//// Example usage
+//var portal = "some_name";
+//var stream = ['E'.charCodeAt(0)].add_int32(4 + portal.length + 1 + 4).add_cstring(portal).add_int32(0);
+//p(stream);
+//// output [69,0,0,0,18,115,111,109,101,95,110,97,109,101,0,0,0,0,0]

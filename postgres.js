@@ -1,4 +1,4 @@
-/*jslint bitwise: true, eqeqeq: true, immed: true, newcap: true, nomen: true, onevar: false, plusplus: true, regexp: true, undef: true, white: true, indent: 2 */
+/*jslint bitwise: true, eqeqeq: true, immed: true, newcap: true, nomen: true, onevar: true, plusplus: true, regexp: true, undef: true, white: true, indent: 2 */
 /*globals include md5 node exports */
 
 include('util.js');
@@ -14,7 +14,6 @@ Array.prototype.add_header = function (code) {
   stream.add_int32(this.length + 4);
   return stream.concat(this);
 };
-
 
 // http://www.postgresql.org/docs/8.3/static/protocol-message-formats.html
 var formatter = {
@@ -76,7 +75,7 @@ var formatter = {
   }
 };
 
-
+// Parse response streams from the server
 function parse_response(code, stream) {
   var type, args;
   args = [];
@@ -150,17 +149,17 @@ function parse_response(code, stream) {
     break;
   case 'D':
     type = "DataRow";
-    row = [];
+    var data = [];
     var num_cols = stream.parse_int16();
     for (i = 0; i < num_cols; i += 1) {
       var size = stream.parse_int32();
       if (size === -1) {
-        row.push(null);
+        data.push(null);
       } else {
-        row.push(stream.parse_raw_string(size));
+        data.push(stream.parse_raw_string(size));
       }
     }
-    args = [row];
+    args = [data];
     break;
   case 'C':
     type = "CommandComplete";
@@ -172,6 +171,7 @@ function parse_response(code, stream) {
   }
   return {type: type, args: args};
 }
+
 
 exports.Connection = function (database, username, password) {
 
@@ -274,10 +274,25 @@ exports.Connection = function (database, username, password) {
   });
   events.addListener("DataRow", function (data) {
     var row = {};
-    data.each_with_index(function (i, cell) {
+    for (var i = 0, l = data.length; i < l; i += 1) {
       var description = row_description[i];
-      row[description.field] = cell;
-    });
+      var value = data[i];
+      if (value !== null) {
+        // TODO: investigate to see if these numbers are stable across databases or
+        // if we need to dynamically pull them from the pg_types table
+        switch (description.type_id) {
+        case 16: // bool
+          value = value === 't';
+          break;
+        case 20: // int8
+        case 21: // int2
+        case 23: // int4
+          value = parseInt(value, 10);
+          break;
+        }
+      }
+      row[description.field] = value;
+    }
     results.push(row);
   });
   events.addListener('CommandComplete', function (data) {
