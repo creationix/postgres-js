@@ -2,7 +2,7 @@ var DEBUG = 0;
 
 include('util.js');
 
-function add_int(message, num) {
+function add_int32(message, num) {
 	var part;
 	part = Math.floor(num / 0xffffff);
 	message.push(part);
@@ -35,7 +35,7 @@ function add_string(message, text) {
 
 function format_message(type, body) {
 	var message = [type.charCodeAt(0)];
-	add_int(message, body.length + 4);
+	add_int32(message, body.length + 4);
 	add_string(message, body);
 	
 	return message;
@@ -43,6 +43,14 @@ function format_message(type, body) {
 
 // http://www.postgresql.org/docs/8.3/static/protocol-message-formats.html
 var formatter = {
+  AddHeader: function (message, code) {
+    var stream = [];
+    if (code) {
+      stream.push(code.charCodeAt(0));
+    }
+    add_int32(stream, message.length + 4);
+    return stream.concat(message);
+  },
 	CopyData: function () {
 		// TODO: implement
 	},
@@ -50,55 +58,47 @@ var formatter = {
 		// TODO: implement
 	},
 	Describe: function (name, type) {
-		var message = ['D'.charCodeAt(0)];
-		add_int(message, name.length + 6);
+		var message = [];
 		message.push(type.charCodeAt(0));
 		add_string(message, name);
-		return message;
+		return formatter.AddHeader(message, 'D');
 	},
 	Execute: function (name, max_rows) {
-		var message = ['E'.charCodeAt(0)];
-		add_int(message, name.length + 9);
+		var message = [];
 		add_string(message, name);
-		add_int(message, max_rows);
-		return message;
+		add_int32(message, max_rows);
+		return formatter.AddHeader(message, 'E');
 	},
 	Flush: function () {
-		var message = ['H'.charCodeAt(0)];
-		add_int(message, 4);
-		return message;
+		return formatter.AddHeader([], 'H');
 	},
 	FunctionCall: function () {
 		// TODO: implement
 	},
 	Parse: function (name, query, var_types) {
-		var message = ['P'.charCodeAt(0)];
-		add_int(message, 4 + name.length + query.length + 4 + var_types.length * 4);
+		var message = [];
 		add_string(message, name);
 		add_string(message, query);
 		add_int16(message, var_types.length);
 		var_types.each(function (var_type) {
-		  add_int(message, var_type);
+		  add_int32(message, var_type);
 		});
-		return message;
+		return formatter.AddHeader(message, 'P');
 	},
 	PasswordMessage: function (password) {
-		var message = ['p'.charCodeAt(0)];
-		add_int(message, password.length + 5);
+		var message = [];
 		add_string(message, password);
-		return message;
+		return formatter.AddHeader(message, 'p');
 	},
 	Query: function (query) {
-		var message = ['Q'.charCodeAt(0)];
-		add_int(message, query.length + 5);
+		var message = [];
 		add_string(message, query);
-		return message;
+		return formatter.AddHeader(message, 'Q');
 	},
 	SSLRequest: function () {
 		var message = [];
-		add_int(message, 8); // Message length
-		add_int(message, 80877103); 
-		return message;
+		add_int32(message, 80877103); 
+		return formatter.AddHeader(message);
 	},
 	StartupMessage: function (options) {
 		var message = [];
@@ -108,39 +108,34 @@ var formatter = {
 				text += k + String.fromCharCode(0) + options[k] + String.fromCharCode(0);
 			}
 		}
-		add_int(message, text.length + 9); // Message length
-		add_int(message, 196608); // Protocol version number
+		add_int32(message, 196608); // Protocol version number
 		add_string(message, text); // options
-		return message;
+		return formatter.AddHeader(message);
 	},
 	Sync: function () {
-		var message = ['S'.charCodeAt(0)];
-		add_int(message, 4);
-		return message;
+		return formatter.AddHeader([], 'S');
 	},
 	Terminate: function () {
-		var message = ['X'.charCodeAt(0)];
-		add_int(message, 4);
-		return message;
+		return formatter.AddHeader([], 'X');
 	}
 };
 
+// Convert 4 bytes to signed 32 bit integer
 function parse_int32(message) {
-	return message.shift() * 0xffffff + message.shift() * 0xffff + message.shift() * 0xff + message.shift();
+	var unsigned = message.shift() * 0x1000000 + message.shift() * 0x10000 + message.shift() * 0x100 + message.shift();
+  return (unsigned & 0x80000000) ? (unsigned - 0x100000000) : unsigned;
 }
 
+// Convert 2 bytes to signed 16 bit integer
 function parse_int16(message) {
-	return message.shift() * 0xff + message.shift();
+  var unsigned = message.shift() * 0x100 + message.shift();
+  return (unsigned & 0x8000) ? (unsigned - 0x10000) : unsigned;
 }
 
 function parse_string(message) {
 	var text = "";
-	while (message[0] !== 0) {
-	  var n = message.shift();
-		if (n < 0) {
-		  n += 256;
-		}
-		text += String.fromCharCode(n);
+	while (message.length > 0 && message[0] !== 0) {
+		text += String.fromCharCode(message.shift());
 	}
 	message.shift();
 	return text;
@@ -159,18 +154,12 @@ function parse_raw_string(message, len) {
 	var text = "";
 	while (len > 0) {
 		len -= 1;
-		var n = message.shift();
-		if (n < 0) {
-		  n += 256;
-		}
-		text += String.fromCharCode(n);
+		text += String.fromCharCode(message.shift());
 	}
 	return text;
 }
 
-function parse_response(message) {
-	var code = String.fromCharCode(message.shift());
-	var len = parse_int32(message);
+function parse_response(code, message) {
 	var type;
 	var args = [];
 	switch (code) {
@@ -250,7 +239,11 @@ function parse_response(message) {
     var num_cols = parse_int16(message);
     for (var i = 0; i < num_cols; i += 1) {
       var size = parse_int32(message);
-      row.push(parse_raw_string(message, size));
+      if (size === -1) {
+        row.push(null);
+      } else {
+        row.push(parse_raw_string(message, size));
+      }
     }
     args = [row];
     break;
@@ -282,11 +275,9 @@ exports.Connection = function (database, username, password) {
   function sendMessage(type, args) {
 	  var message = formatter[type].apply(this, args);
 	  if (DEBUG > 0) {
-	    print("Sending " + type + ": ");
-	    p(args);
-	    if (DEBUG > 1) {
-	      print("->");
-	      p(message);
+	    node.debug("Sending " + type + ": " + JSON.stringify(args));
+	    if (DEBUG > 2) {
+	      node.debug("->" + JSON.stringify(message));
 	    }
 	  }
 	  connection.send(message, "raw");
@@ -298,16 +289,30 @@ exports.Connection = function (database, username, password) {
 		sendMessage('StartupMessage', [{user: username, database: database}]);
 	});
 	connection.addListener("receive", function (data) {
+
+	  // Hack to work around bug in node
+	  // TODO: remove once Ry fixes bug
+	  for (var i = 0, l = data.length; i < l; i += 1) {
+	    if (data[i] < 0) {
+	      data[i] += 256;
+	    }
+	  }
+
+    if (DEBUG > 2) {
+      node.debug("<-" + JSON.stringify(data));
+  	}
+	
 	  while (data.length > 0) {
+  		var code = String.fromCharCode(data.shift());
+	    var len = parse_int32(data);
+	    var message = data.splice(0, len - 4);
 	    if (DEBUG > 1) {
-        print("<-");
-    		p(data);
+        node.debug("message: " + code + " " + JSON.stringify(message));
     	}
-  		var command = parse_response(data);
+  		var command = parse_response(code, message);
 	    if (command.type) {
   	    if (DEBUG > 0) {
-		      print("Received " + command.type + ": ");
-		      p(command.args);
+		      node.debug("Received " + command.type + ": " + JSON.stringify(command.args));
 		    }
 		    events.emit(command.type, command.args);
 	    }
