@@ -1,11 +1,13 @@
+/*jslint bitwise: true, eqeqeq: true, immed: true, newcap: true, nomen: true, onevar: true, plusplus: true, regexp: true, undef: true, white: true, indent: 2 */
+
+// Extend some base objects with much needed functionality
 Array.prototype.each = function (fn) {
-  for (var i = 0, l = this.length; i < l; i++) {
+  for (var i = 0, l = this.length; i < l; i += 1) {
     if (this.hasOwnProperty(i)) {
       fn.call(this, this[i]);
     }
   }
 };
-
 Array.prototype.pack = function () {
   var string = "";
   this.each(function (v) {
@@ -13,7 +15,6 @@ Array.prototype.pack = function () {
   });
   return string;
 };
-
 Array.prototype.each_with_index = function (fn) {
   for (var i = 0, l = this.length; i < l; i += 1) {
     if (this.hasOwnProperty(i)) {
@@ -21,7 +22,6 @@ Array.prototype.each_with_index = function (fn) {
     }
   }
 };
-
 
 Object.prototype.each = function (fn) {
   for (var i in this) {
@@ -31,19 +31,16 @@ Object.prototype.each = function (fn) {
   }
 };
 
-
 String.prototype.each = function (fn) {
   for (var i = 0, l = this.length; i < l; i += 1) {
     fn.call(this, this[i]);  
   }
 };
-
 String.prototype.each_byte = function (fn) {
   for (var i = 0, l = this.length; i < l; i += 1) {
     fn.call(this, this.charCodeAt(i));  
   }
 };
-
 String.prototype.unpack = function () {
   var list = [];
   this.each_byte(function (b) {
@@ -51,5 +48,3 @@ String.prototype.unpack = function () {
   });
   return list;
 };
-
-
