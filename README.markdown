@@ -5,11 +5,11 @@ It uses the node.js tcp and event libraries.  A javascript md5 library is includ
 
 ## Example use
 
-    include('md5.js');
-    var postgres = require('postgres.js');
+    node.mixin(include('md5.js'));
+    var Postgres = require('postgres.js');
 
     function onLoad() {
-      var db = new postgres.Connection("database", "username", "password");
+      var db = new Postgres.Connection("database", "username", "password");
       db.query("SELECT * FROM sometable", function (data) {
         p(data);    
       });

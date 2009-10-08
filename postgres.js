@@ -1,8 +1,8 @@
 /*jslint bitwise: true, eqeqeq: true, immed: true, newcap: true, nomen: true, onevar: true, plusplus: true, regexp: true, undef: true, white: true, indent: 2 */
 /*globals include md5 node exports */
 
-include('util.js');
-include('bits.js');
+node.mixin(require('util.js'));
+node.mixin(require('bits.js'));
 
 var DEBUG = 0;
 

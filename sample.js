@@ -1,10 +1,13 @@
-include('md5.js');
-var postgres = require('postgres.js');
+node.mixin(require("/utils.js"));
+node.mixin(require('md5.js'));
+var Postgres = require('postgres.js');
 
 function onLoad() {
-  var db = new postgres.Connection("database", "username", "password");
-  db.query("SELECT * FROM sometable", function (data) {
-    p(data);    
+  var db = new Postgres.Connection("username", "database", "password");
+  ARGV.each(function (sql) {
+    db.query(sql, function (data) {
+      p(data);    
+    });
   });
   db.close();
 }
