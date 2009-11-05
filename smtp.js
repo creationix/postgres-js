@@ -17,7 +17,7 @@ function wordwrap(str) {
 
 
 exports.sendmail = function (from, to, subject, body) {
-  var connection = node.tcp.createConnection(25);
+  var connection = process.tcp.createConnection(25);
   connection.addListener("connect", function (socket) {
     connection.send("helo localhost\r\n");
     connection.send("mail from: " + from + "\r\n");

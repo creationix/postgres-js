@@ -1,6 +1,6 @@
-node.mixin(require("/utils.js"));
-node.mixin(require('md5.js'));
-var Postgres = require('postgres.js');
+process.mixin(require("sys"));
+process.mixin(require('./md5'));
+var Postgres = require('./postgres')
 
 function onLoad() {
   var db = new Postgres.Connection("username", "database", "password");

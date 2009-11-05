@@ -1,8 +1,8 @@
 /*jslint bitwise: true, eqeqeq: true, immed: true, newcap: true, nomen: true, onevar: true, plusplus: true, regexp: true, undef: true, white: true, indent: 2 */
 /*globals include md5 node exports */
 
-node.mixin(require('util.js'));
-node.mixin(require('bits.js'));
+process.mixin(require('./util'));
+process.mixin(require('./bits'));
 
 var DEBUG = 0;
 
@@ -167,7 +167,7 @@ function parse_response(code, stream) {
     break;
   }
   if (!type) {
-    node.debug("Unknown response " + code);  
+    process.debug("Unknown response " + code);  
   }
   return {type: type, args: args};
 }
@@ -175,8 +175,8 @@ function parse_response(code, stream) {
 
 exports.Connection = function (database, username, password) {
 
-  var connection = node.tcp.createConnection(5432);
-  var events = new node.EventEmitter();
+  var connection = process.tcp.createConnection(5432);
+  var events = new process.EventEmitter();
   var query_queue = [];
   var row_description;
   var query_callback;
@@ -188,9 +188,9 @@ exports.Connection = function (database, username, password) {
   function sendMessage(type, args) {
     var stream = formatter[type].apply(this, args);
     if (DEBUG > 0) {
-      node.debug("Sending " + type + ": " + JSON.stringify(args));
+      process.debug("Sending " + type + ": " + JSON.stringify(args));
       if (DEBUG > 2) {
-        node.debug("->" + JSON.stringify(stream));
+        process.debug("->" + JSON.stringify(stream));
       }
     }
     connection.send(stream, "raw");
@@ -212,7 +212,7 @@ exports.Connection = function (database, username, password) {
     }
 
     if (DEBUG > 2) {
-      node.debug("<-" + JSON.stringify(data));
+      process.debug("<-" + JSON.stringify(data));
     }
   
     while (data.length > 0) {
@@ -220,12 +220,12 @@ exports.Connection = function (database, username, password) {
       var len = data.parse_int32();
       var stream = data.splice(0, len - 4);
       if (DEBUG > 1) {
-        node.debug("stream: " + code + " " + JSON.stringify(stream));
+        process.debug("stream: " + code + " " + JSON.stringify(stream));
       }
       var command = parse_response(code, stream);
       if (command.type) {
         if (DEBUG > 0) {
-          node.debug("Received " + command.type + ": " + JSON.stringify(command.args));
+          process.debug("Received " + command.type + ": " + JSON.stringify(command.args));
         }
         events.emit(command.type, command.args);
       }
@@ -236,7 +236,7 @@ exports.Connection = function (database, username, password) {
   });
   connection.addListener("disconnect", function (had_error) {
     if (had_error) {
-      node.debug("CONNECTION DIED WITH ERROR");
+      process.debug("CONNECTION DIED WITH ERROR");
     }
   });
 
@@ -250,7 +250,7 @@ exports.Connection = function (database, username, password) {
   });
   events.addListener('ErrorResponse', function (e) {
     if (e.S === 'FATAL') {
-      node.debug(e.S + ": " + e.M);
+      process.debug(e.S + ": " + e.M);
       connection.close();
     }
   });
