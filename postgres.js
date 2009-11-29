@@ -6,7 +6,7 @@ process.mixin(require('./postgres-js/md5'));
 var tcp = require("tcp");
 var sys = require("sys");
 
-var DEBUG = 0;
+exports.DEBUG = 0;
 
 String.prototype.add_header = function (code) {
   if (code === undefined) {
@@ -206,9 +206,9 @@ exports.Connection = function (database, username, password, port) {
   // Sends a message to the postgres server
   function sendMessage(type, args) {
     var stream = formatter[type].apply(this, args);
-    if (DEBUG > 0) {
+    if (exports.DEBUG > 0) {
       sys.debug("Sending " + type + ": " + JSON.stringify(args));
-      if (DEBUG > 2) {
+      if (exports.DEBUG > 2) {
         sys.debug("->" + JSON.stringify(stream));
       }
     }
@@ -230,7 +230,7 @@ exports.Connection = function (database, username, password, port) {
       }
     }
 
-    if (DEBUG > 2) {
+    if (exports.DEBUG > 2) {
       sys.debug("<-" + JSON.stringify(data));
     }
   
@@ -239,12 +239,12 @@ exports.Connection = function (database, username, password, port) {
       var len = data.substr(1, 4).parse_int32()[1];
       var stream = data.substr(5, len - 4);
       data = data.substr(len + 1);
-      if (DEBUG > 1) {
+      if (exports.DEBUG > 1) {
         sys.debug("stream: " + code + " " + JSON.stringify(stream));
       }
       var command = parse_response(code, stream);
       if (command.type) {
-        if (DEBUG > 0) {
+        if (exports.DEBUG > 0) {
           sys.debug("Received " + command.type + ": " + JSON.stringify(command.args));
         }
         command.args.unshift(command.type);
