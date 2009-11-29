@@ -1,8 +1,8 @@
 /*jslint bitwise: true, eqeqeq: true, immed: true, newcap: true, nomen: true, onevar: true, plusplus: true, regexp: true, undef: true, white: true, indent: 2 */
 /*globals include md5 node exports */
 
-process.mixin(require('./bits'));
-process.mixin(require('./md5'));
+process.mixin(require('./postgres-js/bits'));
+process.mixin(require('./postgres-js/md5'));
 var tcp = require("tcp");
 var sys = require("sys");
 
