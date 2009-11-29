@@ -222,14 +222,6 @@ exports.Connection = function (database, username, password, port) {
   });
   connection.addListener("receive", function (data) {
 
-    // Hack to work around bug in node
-    // TODO: remove once Ry fixes bug
-    for (var i = 0, l = data.length; i < l; i += 1) {
-      if (data[i] < 0) {
-        data[i] += 256;
-      }
-    }
-
     if (exports.DEBUG > 2) {
       sys.debug("<-" + JSON.stringify(data));
     }
