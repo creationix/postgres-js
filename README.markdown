@@ -1,11 +1,10 @@
 # PostgreSQL for Javascript
 
 This library is a implementation of the PostgreSQL backend/frontend protocol in javascript.
-It uses the node.js tcp and event libraries.  A javascript md5 library is included for servers that require md5 password hashing.
+It uses the node.js tcp and event libraries.  A javascript md5 library is included for servers that require md5 password hashing (this is default).
 
 ## Example use
 
-    node.mixin(include('md5.js'));
     var Postgres = require('postgres.js');
 
     function onLoad() {
