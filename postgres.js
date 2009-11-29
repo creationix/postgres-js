@@ -187,9 +187,14 @@ function parse_response(code, stream) {
 }
 
 
-exports.Connection = function (database, username, password) {
+exports.Connection = function (database, username, password, port) {
+  
+  // Default to port 5432
+  if (port === undefined) {
+    port = 5432;
+  }
 
-  var connection = tcp.createConnection(25432);
+  var connection = tcp.createConnection(port);
   var events = new process.EventEmitter();
   var query_queue = [];
   var row_description;
