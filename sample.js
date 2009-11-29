@@ -1,15 +1,13 @@
-process.mixin(require("sys"));
-process.mixin(require('./md5'));
+var sys = require("sys");
 var Postgres = require('./postgres')
 
-function onLoad() {
-  var db = new Postgres.Connection("username", "database", "password");
-  ARGV.each(function (sql) {
-    db.query(sql, function (data) {
-      p(data);    
-    });
+var db = new Postgres.Connection("land", "enterprisedb", "enterprisedb");
+process.ARGV.slice(2).forEach(function (sql) {
+  sys.puts(sql)
+  db.query(sql, function (data) {
+    sys.p(data);    
   });
-  db.close();
-}
+});
+db.close();
 
 

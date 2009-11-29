@@ -1,19 +1,29 @@
 /*jslint bitwise: true, eqeqeq: true, immed: true, newcap: true, nomen: true, onevar: true, plusplus: true, regexp: true, undef: true, white: true, indent: 2 */
 /*globals include md5 node exports */
 
-process.mixin(require('./util'));
 process.mixin(require('./bits'));
+process.mixin(require('./md5'));
+var tcp = require("tcp");
+var sys = require("sys");
 
 var DEBUG = 0;
 
-Array.prototype.add_header = function (code) {
-  var stream = [];
-  if (code) {
-    stream.push(code.charCodeAt(0));
+String.prototype.add_header = function (code) {
+  if (code === undefined) {
+    code = "";
   }
-  stream.add_int32(this.length + 4);
-  return stream.concat(this);
+  return code.add_int32(this.length + 4) + this;
 };
+
+Object.prototype.map_pairs = function (func) {
+  var result = [];
+  for (var k in this) {
+    if (this.hasOwnProperty(k)) {
+      result.push(func.call(this, k, this[k]));
+    }
+  }
+  return result;
+}
 
 // http://www.postgresql.org/docs/8.3/static/protocol-message-formats.html
 var formatter = {
@@ -50,22 +60,20 @@ var formatter = {
     return stream.add_header('P');
   },
   PasswordMessage: function (password) {
-    return [].add_cstring(password).add_header('p');
+    return "".add_cstring(password).add_header('p');
   },
   Query: function (query) {
-    return [].add_cstring(query).add_header('Q');
+    return "".add_cstring(query).add_header('Q');
   },
   SSLRequest: function () {
-    return [].add_int32(0x4D2162F).add_header();
+    return "".add_int32(0x4D2162F).add_header();
   },
   StartupMessage: function (options) {
-    var stream = [].add_int32(0x30000); // Protocol version number 3
-    options.each(function (key, value) {
-      stream.add_cstring(key);
-      stream.add_cstring(value);
-    });
-    stream.push(0);
-    return stream.add_header();
+    // Protocol version number 3
+    return ("".add_int32(0x30000) +
+      options.map_pairs(function (key, value) {
+        return "".add_cstring(key).add_cstring(value);
+      }).join("") + "0").add_header();
   },
   Sync: function () {
     return [].add_header('S');
@@ -81,7 +89,7 @@ function parse_response(code, stream) {
   args = [];
   switch (code) {
   case 'R':
-    switch (stream.parse_int32()) {
+    switch (stream.parse_int32()[1]) {
     case 0:
       type = "AuthenticationOk";
       break;
@@ -93,11 +101,11 @@ function parse_response(code, stream) {
       break;
     case 4:
       type = "AuthenticationCryptPassword";
-      args = [stream.parse_raw_string(2)];
+      args = stream.substr(4).parse(["raw_string", 2])[1];
       break;
     case 5:
       type = "AuthenticationMD5Password";
-      args = [stream.parse_raw_string(4)];
+      args = stream.substr(4).parse(["raw_string", 4])[1];
       break;
     case 6:
       type = "AuthenticationSCMCredential";
@@ -114,60 +122,66 @@ function parse_response(code, stream) {
   case 'E':
     type = "ErrorResponse";
     args = [{}];
-    stream.parse_multi_cstring().each(function (field) {
+    stream.parse("multi_cstring")[1][0].forEach(function (field) {
       args[0][field[0]] = field.substr(1);
     });
     break;
   case 'S':
     type = "ParameterStatus";
-    args = [stream.parse_cstring(), stream.parse_cstring()];
+    args = stream.parse("cstring", "cstring")[1];
     break;
   case 'K':
     type = "BackendKeyData";
-    args = [stream.parse_int32(), stream.parse_int32()];
+    args = stream.parse("int32", "int32")[1];
     break;
   case 'Z':
     type = "ReadyForQuery";
-    args = [stream.parse_raw_string(1)];
+    args = stream.parse(["raw_string", 1])[1];
     break;
   case 'T':
     type = "RowDescription";
-    var num_fields = stream.parse_int16();
+    var num_fields = stream.parse_int16()[1];
+    stream = stream.substr(2);
     var row = [];
     for (var i = 0; i < num_fields; i += 1) {
+      var parts = stream.parse("cstring", "int32", "int16", "int32", "int16", "int32", "int16");
       row.push({
-        field: stream.parse_cstring(),
-        table_id: stream.parse_int32(),
-        column_id: stream.parse_int16(),
-        type_id: stream.parse_int32(),
-        type_size: stream.parse_int16(),
-        type_modifier: stream.parse_int32(),
-        format_code: stream.parse_int16()
+        field: parts[1][0],
+        table_id: parts[1][1],
+        column_id: parts[1][2],
+        type_id: parts[1][3],
+        type_size: parts[1][4],
+        type_modifier: parts[1][5],
+        format_code: parts[1][6]
       });
+      stream = stream.substr(parts[0]);
     }
     args = [row];
     break;
   case 'D':
     type = "DataRow";
     var data = [];
-    var num_cols = stream.parse_int16();
+    var num_cols = stream.parse_int16()[1];
+    stream = stream.substr(2);
     for (i = 0; i < num_cols; i += 1) {
-      var size = stream.parse_int32();
+      var size = stream.parse_int32()[1];
+      stream = stream.substr(4);
       if (size === -1) {
         data.push(null);
       } else {
-        data.push(stream.parse_raw_string(size));
+        data.push(stream.parse_raw_string(size)[1]);
+        stream = stream.substr(size);
       }
     }
     args = [data];
     break;
   case 'C':
     type = "CommandComplete";
-    args = [stream.parse_cstring()];
+    args = stream.parse("cstring")[1];
     break;
   }
   if (!type) {
-    process.debug("Unknown response " + code);  
+    sys.debug("Unknown response " + code);  
   }
   return {type: type, args: args};
 }
@@ -175,7 +189,7 @@ function parse_response(code, stream) {
 
 exports.Connection = function (database, username, password) {
 
-  var connection = process.tcp.createConnection(5432);
+  var connection = tcp.createConnection(25432);
   var events = new process.EventEmitter();
   var query_queue = [];
   var row_description;
@@ -188,16 +202,16 @@ exports.Connection = function (database, username, password) {
   function sendMessage(type, args) {
     var stream = formatter[type].apply(this, args);
     if (DEBUG > 0) {
-      process.debug("Sending " + type + ": " + JSON.stringify(args));
+      sys.debug("Sending " + type + ": " + JSON.stringify(args));
       if (DEBUG > 2) {
-        process.debug("->" + JSON.stringify(stream));
+        sys.debug("->" + JSON.stringify(stream));
       }
     }
-    connection.send(stream, "raw");
+    connection.send(stream, "binary");
   }
   
   // Set up tcp client
-  connection.setEncoding("raw");
+  connection.setEncoding("binary");
   connection.addListener("connect", function () {
     sendMessage('StartupMessage', [{user: username, database: database}]);
   });
@@ -212,22 +226,24 @@ exports.Connection = function (database, username, password) {
     }
 
     if (DEBUG > 2) {
-      process.debug("<-" + JSON.stringify(data));
+      sys.debug("<-" + JSON.stringify(data));
     }
   
     while (data.length > 0) {
-      var code = String.fromCharCode(data.shift());
-      var len = data.parse_int32();
-      var stream = data.splice(0, len - 4);
+      var code = data[0];
+      var len = data.substr(1, 4).parse_int32()[1];
+      var stream = data.substr(5, len - 4);
+      data = data.substr(len + 1);
       if (DEBUG > 1) {
-        process.debug("stream: " + code + " " + JSON.stringify(stream));
+        sys.debug("stream: " + code + " " + JSON.stringify(stream));
       }
       var command = parse_response(code, stream);
       if (command.type) {
         if (DEBUG > 0) {
-          process.debug("Received " + command.type + ": " + JSON.stringify(command.args));
+          sys.debug("Received " + command.type + ": " + JSON.stringify(command.args));
         }
-        events.emit(command.type, command.args);
+        command.args.unshift(command.type);
+        events.emit.apply(events, command.args);
       }
     }
   });
@@ -236,7 +252,7 @@ exports.Connection = function (database, username, password) {
   });
   connection.addListener("disconnect", function (had_error) {
     if (had_error) {
-      process.debug("CONNECTION DIED WITH ERROR");
+      sys.debug("CONNECTION DIED WITH ERROR");
     }
   });
 
@@ -250,7 +266,7 @@ exports.Connection = function (database, username, password) {
   });
   events.addListener('ErrorResponse', function (e) {
     if (e.S === 'FATAL') {
-      process.debug(e.S + ": " + e.M);
+      sys.debug(e.S + ": " + e.M);
       connection.close();
     }
   });
