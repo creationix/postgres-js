@@ -72,7 +72,7 @@
   };
   
   proto.push_hash = function (hash) {
-    for (key in hash) {
+    for (var key in hash) {
       if (hash.hasOwnProperty(key)) {
         this.data += key + "\0" + hash[key] + "\0";
       }
@@ -100,7 +100,7 @@
     var code = this.data[0];
     this.data = this.data.substr(1);
     return code;
-  }
+  };
 
   // Convert 4 characters to signed 32 bit integer
   proto.shift_int32 = function () {
