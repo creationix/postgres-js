@@ -9,7 +9,8 @@
 
   var chr, proto;
   
-  exports.Encoder = function () {
+  exports.Encoder = function (header) {
+    this.header = header || "";
     this.data = "";
   };
 
@@ -30,13 +31,9 @@
     return chr(a) + chr(b) + chr(c) + chr(d);
   }
 
-  // Add a postgres header to the binary string
-  proto.add_header = function (code) {
-    if (code === undefined) {
-      code = "";
-    }
-    this.data = code + encode_int32(this.data.length + 4) + this.data;
-    return this;
+  // Add a postgres header to the binary string and return it.
+  proto.toString = function () {
+    return this.header + encode_int32(this.data.length + 4) + this.data;
   };
 
   // Encode number as 32 bit 2s compliment
@@ -73,6 +70,16 @@
     this.data += fields.join("\0") + "\0\0";
     return this;
   };
+  
+  proto.push_hash = function (hash) {
+    for (key in hash) {
+      if (hash.hasOwnProperty(key)) {
+        this.data += key + "\0" + hash[key] + "\0";
+      }
+    }
+    this.data += "\0";
+    return this;
+  };
 
 }());
 
@@ -88,6 +95,12 @@
   };
 
   proto = exports.Decoder.prototype;
+
+  proto.shift_code = function () {
+    var code = this.data[0];
+    this.data = this.data.substr(1);
+    return code;
+  }
 
   // Convert 4 characters to signed 32 bit integer
   proto.shift_int32 = function () {
@@ -113,7 +126,7 @@
   // Grab a null terminated string
   proto.shift_cstring = function () {
     var pos, string;
-    pos = this.indexOf("\0");
+    pos = this.data.indexOf("\0");
     string = this.data.substr(0, pos);
     this.data = this.data.substr(pos + 1);
     return string;
