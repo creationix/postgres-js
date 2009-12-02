@@ -38,7 +38,7 @@ var formatter = {
       .push_cstring(query)
       .push_int16(var_types.length);
     var_types.each(function (var_type) {
-      stream.push_int32(var_type);
+      builder.push_int32(var_type);
     });
     return builder;
   },
@@ -70,8 +70,8 @@ var formatter = {
 
 // Parse response streams from the server
 function parse_response(code, stream) {
-  var input = new bits.Decoder(stream);
-  var type, args;
+  var input, type, args, num_fields, data, size, i;
+  input = new bits.Decoder(stream);
   args = [];
   switch (code) {
   case 'R':
@@ -126,10 +126,10 @@ function parse_response(code, stream) {
     break;
   case 'T':
     type = "RowDescription";
-    var num_fields = stream.shift_int16();
-    var row = [];
-    for (var i = 0; i < num_fields; i += 1) {
-      row.push({
+    num_fields = stream.shift_int16();
+    data = [];
+    for (i = 0; i < num_fields; i += 1) {
+      data.push({
         field: stream.shift_cstring(),
         table_id: stream.shift_int32(),
         column_id: stream.shift_int16(),
@@ -139,14 +139,14 @@ function parse_response(code, stream) {
         format_code: stream.shift_int16()
       });
     }
-    args = [row];
+    args = [data];
     break;
   case 'D':
     type = "DataRow";
-    var data = [];
-    var num_cols = stream.shift_int16();
-    for (i = 0; i < num_cols; i += 1) {
-      var size = stream.shift_int32();
+    data = [];
+    num_fields = stream.shift_int16();
+    for (i = 0; i < num_fields; i += 1) {
+      size = stream.shift_int32();
       if (size === -1) {
         data.push(null);
       } else {
@@ -168,20 +168,18 @@ function parse_response(code, stream) {
 
 
 exports.Connection = function (database, username, password, port) {
+  var connection, events, query_queue, row_description, query_callback, results, readyState, closeState;
   
   // Default to port 5432
   if (port === undefined) {
     port = 5432;
   }
 
-  var connection = tcp.createConnection(port);
-  var events = new process.EventEmitter();
-  var query_queue = [];
-  var row_description;
-  var query_callback;
-  var results;
-  var readyState = false;
-  var closeState = false;
+  connection = tcp.createConnection(port);
+  events = new process.EventEmitter();
+  query_queue = [];
+  readyState = false;
+  closeState = false;
 
   // Sends a message to the postgres server
   function sendMessage(type, args) {
@@ -201,19 +199,20 @@ exports.Connection = function (database, username, password, port) {
     sendMessage('StartupMessage', [{user: username, database: database}]);
   });
   connection.addListener("receive", function (data) {
-    var input = new bits.Decoder(data);
+    var input, code, len, stream, command;
+    input = new bits.Decoder(data);
     if (exports.DEBUG > 2) {
       sys.debug("<-" + JSON.stringify(data));
     }
   
     while (input.data.length > 0) {
-      var code = input.shift_code();
-      var len = input.shift_int32();
-      var stream = new bits.Decoder(input.shift_raw_string(len - 4));
+      code = input.shift_code();
+      len = input.shift_int32();
+      stream = new bits.Decoder(input.shift_raw_string(len - 4));
       if (exports.DEBUG > 1) {
         sys.debug("stream: " + code + " " + JSON.stringify(stream));
       }
-      var command = parse_response(code, stream);
+      command = parse_response(code, stream);
       if (command.type) {
         if (exports.DEBUG > 0) {
           sys.debug("Received " + command.type + ": " + JSON.stringify(command.args));
@@ -265,10 +264,12 @@ exports.Connection = function (database, username, password, port) {
     results = [];
   });
   events.addListener("DataRow", function (data) {
-    var row = {};
-    for (var i = 0, l = data.length; i < l; i += 1) {
-      var description = row_description[i];
-      var value = data[i];
+    var row, i, l, description, value;
+    row = {};
+    l = data.length;
+    for (i = 0; i < l; i += 1) {
+      description = row_description[i];
+      value = data[i];
       if (value !== null) {
         // TODO: investigate to see if these numbers are stable across databases or
         // if we need to dynamically pull them from the pg_types table
