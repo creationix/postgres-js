@@ -305,6 +305,11 @@ exports.Connection = function (database, username, password, port, host) {
   };
   this.close = function () {
     closeState = true;
+
+    // Close the connection right away if there are no pending queries
+    if (readyState) {
+      connection.close();
+    }
   };
 };
 
