@@ -167,15 +167,20 @@ function parse_response(code, stream) {
 }
 
 
-exports.Connection = function (database, username, password, port) {
+exports.Connection = function (database, username, password, port, host) {
   var connection, events, query_queue, row_description, query_callback, results, readyState, closeState;
   
   // Default to port 5432
-  if (port === undefined) {
-    port = 5432;
-  }
+  port = port || 5432;
 
-  connection = tcp.createConnection(port);
+  // Default to host 127.0.0.1
+  host = host || '127.0.0.1';
+
+  connection = tcp.createConnection(port, host);
+
+  // Disable the idle timeout on the connection
+  connection.setTimeout(0);
+
   events = new process.EventEmitter();
   query_queue = [];
   readyState = false;
